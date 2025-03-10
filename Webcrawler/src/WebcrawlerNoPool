@@ -1,0 +1,76 @@
+import java.util.*;
+import java.util.concurrent.*;
+
+class Solution {
+    private final Set<String> visitedUrls = Collections.synchronizedSet(new HashSet<>()); // Thread-safe set
+    private final List<Thread> activeThreads = Collections.synchronizedList(new ArrayList<>()); // Track threads
+
+    public List<String> crawl(String startUrl, HtmlParser htmlParser) {
+        visitedUrls.add(startUrl); // Add starting URL to visited
+        List<String> result = Collections.synchronizedList(new ArrayList<>());
+        
+        Thread mainThread = new Thread(() -> crawlHelper(startUrl, htmlParser, result));
+        mainThread.start();
+        
+        // Wait for all threads to finish
+        try {
+            mainThread.join();
+            for (Thread t : activeThreads) {
+                t.join();
+            }
+        } catch (InterruptedException e) {
+            e.printStackTrace();
+        }
+
+        return result;
+    }
+
+    private void crawlHelper(String url, HtmlParser htmlParser, List<String> result) {
+        result.add(url);
+        List<String> urls = htmlParser.getUrls(url);
+
+        List<Thread> threads = new ArrayList<>();
+        for (String newUrl : urls) {
+            synchronized (visitedUrls) {
+                if (visitedUrls.contains(newUrl) || !isSameHostname(newUrl, url)) {
+                    continue; // Skip already visited URLs or different hostnames
+                }
+                visitedUrls.add(newUrl);
+            }
+
+            Thread thread = new Thread(() -> crawlHelper(newUrl, htmlParser, result));
+            threads.add(thread);
+            activeThreads.add(thread);
+            thread.start();
+        }
+
+        // Wait for child threads to complete
+        for (Thread thread : threads) {
+            try {
+                thread.join();
+            } catch (InterruptedException e) {
+                e.printStackTrace();
+            }
+        }
+    }
+
+    private boolean isSameHostname(String url, String baseUrl) {
+        return getHostname(url).equals(getHostname(baseUrl));
+    }
+
+    private String getHostname(String url) {
+        int idx = url.indexOf('/', 7); // Skip "http://"
+        return (idx != -1) ? url.substring(0, idx) : url;
+    }
+}
+
+// Dummy HtmlParser class to simulate fetching URLs
+interface HtmlParser {
+    List<String> getUrls(String url);
+}
+
+public class Main {
+    public static void main(String[] args) {
+        System.out.println("Hello world!");
+    }
+}
